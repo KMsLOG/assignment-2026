@@ -41,3 +41,11 @@ class BadRequestException(AppException):
     def __init__(self, code: str, message: str, details: dict[str, object] | None = None) -> None:
         """Initialize a 400 bad-request exception."""
         super().__init__(status_code=400, code=code, message=message, details=details)
+
+
+class ServiceUnavailableException(AppException):
+    """Exception for temporary service unavailability."""
+
+    def __init__(self, code: str, message: str, details: dict[str, object] | None = None) -> None:
+        """Initialize a 503 service-unavailable exception."""
+        super().__init__(status_code=503, code=code, message=message, details=details)

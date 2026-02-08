@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_enrollment_service
+from app.api.deps import get_db, get_enrollment_request_slot, get_enrollment_service
 from app.domain.schemas import (
     CancelEnrollmentResponse,
     EnrollmentRequest,
@@ -24,10 +24,12 @@ router = APIRouter(prefix="/api/enrollments", tags=["enrollments"])
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
 )
 def enroll(
     request: EnrollmentRequest,
+    _: Annotated[None, Depends(get_enrollment_request_slot)],
     db: Annotated[Session, Depends(get_db)],
     enrollment_service: Annotated[EnrollmentService, Depends(get_enrollment_service)],
 ) -> EnrollmentResponse:
