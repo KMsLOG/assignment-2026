@@ -1,5 +1,7 @@
 """Application entrypoint and startup lifecycle configuration."""
 
+from contextlib import asynccontextmanager
+from threading import Lock
 import time
 
 from fastapi import FastAPI
@@ -15,7 +17,39 @@ from app.core.exception_handler import register_exception_handlers
 from app.repository.database import SessionLocal, wait_for_database
 from app.services.seed_service import seed_runtime_data
 
-app = FastAPI()
+_startup_lock = Lock()
+
+
+def _initialize_runtime_state(target_app: FastAPI) -> None:
+    """Initialize DB-dependent runtime state once per process."""
+    if target_app.state.seed_status.get("completed"):
+        return
+
+    with _startup_lock:
+        if target_app.state.seed_status.get("completed"):
+            return
+
+        started_at = time.perf_counter()
+        wait_for_database(max_wait_seconds=50)
+        with SessionLocal() as db:
+            result = seed_runtime_data(db)
+
+        target_app.state.seed_status = {
+            "completed": True,
+            "seeded": result["seeded"],
+            "duration_ms": int((time.perf_counter() - started_at) * 1000),
+            "counts": result["counts"],
+        }
+
+
+@asynccontextmanager
+async def lifespan(target_app: FastAPI):
+    """Prepare runtime state before serving requests."""
+    _initialize_runtime_state(target_app)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 app.state.seed_status = {
     "completed": False,
     "seeded": False,
@@ -40,20 +74,9 @@ app.include_router(courses_router)
 app.include_router(enrollments_router)
 
 
-@app.on_event("startup")
 def startup() -> None:
-    """Wait for DB readiness and seed runtime data before serving traffic."""
-    started_at = time.perf_counter()
-    wait_for_database(max_wait_seconds=50)
-    with SessionLocal() as db:
-        result = seed_runtime_data(db)
-
-    app.state.seed_status = {
-        "completed": True,
-        "seeded": result["seeded"],
-        "duration_ms": int((time.perf_counter() - started_at) * 1000),
-        "counts": result["counts"],
-    }
+    """Compatibility helper for test setup."""
+    _initialize_runtime_state(app)
 
 
 if __name__ == "__main__":
