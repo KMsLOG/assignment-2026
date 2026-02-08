@@ -67,5 +67,6 @@ docker exec -it assignment-2026-mysql \
 
 ## 7. API 문서
 
-- 상세 명세: `docs/API.md`
+- OpenAPI(Swagger): `docs/openapi.yaml`
+- 문서 안내: `docs/API.md`
 - 요구사항/설계 결정: `docs/REQUIREMENTS.md`
