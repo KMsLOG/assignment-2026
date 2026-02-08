@@ -26,6 +26,8 @@ MYSQL_PASSWORD=change-me-app-password
 APP_DEBUG=false
 LOG_LEVEL=INFO
 CORS_ALLOW_ORIGINS=http://localhost:8000,http://localhost:3000
+ENROLLMENT_LOCK_RETRY_ATTEMPTS=3
+ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS=0.05
 ```
 
 3. 컨테이너 이미지를 빌드합니다.
@@ -79,3 +81,7 @@ docker compose down
 - CORS 설정:
   - `CORS_ALLOW_ORIGINS`에 쉼표(,)로 구분된 허용 출처 목록을 설정합니다.
   - `*`를 포함하면 credential CORS는 자동으로 비활성화됩니다.
+- 동시성 재시도 설정:
+  - 데드락/락 타임아웃(1213/1205) 시 자동 재시도합니다.
+  - `ENROLLMENT_LOCK_RETRY_ATTEMPTS`: 최대 재시도 횟수(기본 `3`)
+  - `ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS`: 선형 백오프 기본값(기본 `0.05`초)

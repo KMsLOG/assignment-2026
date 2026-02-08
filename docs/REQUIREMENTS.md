@@ -84,6 +84,9 @@
 - 수강신청/취소 시 `students`, `courses` 대상 `SELECT ... FOR UPDATE` 적용
 - 검증 + 상태 변경을 단일 트랜잭션으로 수행
 - 데드락/락 대기 타임아웃(MySQL 1213/1205) 발생 시 짧은 백오프로 자동 재시도
+- 재시도 정책은 환경변수로 조정 가능
+  - `ENROLLMENT_LOCK_RETRY_ATTEMPTS` (기본 3)
+  - `ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS` (기본 0.05)
 - 재시도 소진 시 `409 CONCURRENCY_RETRY_EXHAUSTED`로 명시적 실패 응답
 
 ### 5.3 검증 기준
@@ -148,6 +151,7 @@
 - 모든 응답에 `X-Request-Id`, `X-Process-Time-Ms` 헤더 제공
 - 구조화 요청 로그 기록(request id, method, path, status, duration, client ip)
 - `LOG_LEVEL`로 로그 레벨 제어
+- 처리되지 않은 예외는 스택트레이스와 함께 서버 로그에 기록
 
 ### 8.3 보안 기본기
 - 기본 설정에서 내부 예외 원문 비노출

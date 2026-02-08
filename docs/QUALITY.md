@@ -8,6 +8,7 @@
 - 동일 프로세스에서 중복 seed 작업이 발생하지 않도록 초기화 구간에 락을 적용했습니다.
 - 앱 프로세스 관점에서 런타임 초기화가 멱등적으로 동작하도록 구성했습니다.
 - 수강신청/취소 트랜잭션에서 데드락/락 대기 타임아웃 발생 시 자동 재시도 전략을 적용했습니다.
+  - `ENROLLMENT_LOCK_RETRY_ATTEMPTS`, `ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS`로 운영 중 튜닝 가능합니다.
 
 관련 파일:
 - `src/app/main.py`
@@ -35,6 +36,7 @@
 - 기본 설정에서 내부 서버 에러의 원본 예외 메시지를 외부에 노출하지 않습니다.
 - 로컬 디버깅 시에만 `APP_DEBUG=true`를 사용하도록 분리했습니다.
 - 모든 에러 응답 details에 `request_id`를 포함해 추적성을 확보했습니다.
+- 처리되지 않은 예외는 스택트레이스와 함께 서버 로그(`app.exception`)에 기록합니다.
 - CORS 출처를 `CORS_ALLOW_ORIGINS` 환경변수 기반 allowlist로 관리합니다.
 - 와일드카드(`*`)를 사용할 경우 credential CORS는 자동 비활성화됩니다.
 
