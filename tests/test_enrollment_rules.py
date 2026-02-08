@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import time
 
 from fastapi.testclient import TestClient
+import pytest
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import func, select
 
 from app.core.exceptions import ConflictException
@@ -11,6 +13,10 @@ from app.main import app
 from app.repository.database import SessionLocal
 from app.repository.models import Course, Enrollment
 from app.services.enrollment_service import EnrollmentService
+
+
+class _FakeMySQLError(Exception):
+    """Test helper to emulate DB-API MySQL errors with numeric code."""
 
 
 def test_enroll_cancel_and_timetable_flow(client, test_data_factory) -> None:
@@ -211,3 +217,77 @@ def test_api_concurrency_allows_only_one_success_for_one_remaining_seat(test_dat
 
     assert enrolled == 1
     assert enrolled_rows == 1
+
+
+def test_retry_recovers_from_single_deadlock(monkeypatch, test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    student_id = test_data_factory.create_student(department_id)
+    course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=3,
+        capacity=30,
+        schedule_day="MON",
+        start_time=time(9, 0),
+        end_time=time(10, 30),
+    )
+
+    service = EnrollmentService()
+    original_get_for_update = service.course_repository.get_by_id_for_update
+    calls = {"count": 0}
+
+    def flaky_get_for_update(db, lookup_course_id):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise OperationalError(
+                "SELECT ... FOR UPDATE",
+                {},
+                _FakeMySQLError(1213, "Deadlock found when trying to get lock"),
+            )
+        return original_get_for_update(db, lookup_course_id)
+
+    monkeypatch.setattr(service.course_repository, "get_by_id_for_update", flaky_get_for_update)
+    monkeypatch.setattr("app.services.enrollment_service.time.sleep", lambda _: None)
+
+    with SessionLocal() as db:
+        result = service.enroll(db, student_id, course_id)
+
+    assert result.student_id == student_id
+    assert result.course_id == course_id
+    assert calls["count"] == 2
+
+
+def test_retry_exhaustion_returns_conflict(monkeypatch, test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    student_id = test_data_factory.create_student(department_id)
+    course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=3,
+        capacity=30,
+        schedule_day="TUE",
+        start_time=time(9, 0),
+        end_time=time(10, 30),
+    )
+
+    service = EnrollmentService()
+
+    def always_deadlock(_, __):
+        raise OperationalError(
+            "SELECT ... FOR UPDATE",
+            {},
+            _FakeMySQLError(1213, "Deadlock found when trying to get lock"),
+        )
+
+    monkeypatch.setattr(service.course_repository, "get_by_id_for_update", always_deadlock)
+    monkeypatch.setattr("app.services.enrollment_service.time.sleep", lambda _: None)
+
+    with SessionLocal() as db:
+        with pytest.raises(ConflictException) as caught:
+            service.enroll(db, student_id, course_id)
+
+    assert caught.value.code == "CONCURRENCY_RETRY_EXHAUSTED"
+    assert caught.value.details["attempts"] == 3
+    assert caught.value.details["db_error_code"] == 1213

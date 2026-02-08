@@ -1,7 +1,10 @@
 """Enrollment service implementing registration business rules."""
 
 from datetime import datetime
+import time
+from typing import Callable, TypeVar
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictException, NotFoundException
@@ -12,6 +15,11 @@ from app.repository.student_repository import StudentRepository
 
 
 MAX_CREDITS_PER_STUDENT = 18
+RETRYABLE_LOCK_ERROR_CODES = {1205, 1213}
+MAX_LOCK_RETRY_ATTEMPTS = 3
+LOCK_RETRY_BACKOFF_SECONDS = 0.05
+
+_T = TypeVar("_T")
 
 
 def _is_time_conflict(a_start, a_end, b_start, b_end) -> bool:
@@ -30,6 +38,14 @@ class EnrollmentService:
 
     def enroll(self, db: Session, student_id: int, course_id: int) -> EnrollmentResponse:
         """Enroll a student in a course after validating all constraints."""
+        return self._run_with_lock_retry(
+            operation="enroll",
+            details={"student_id": student_id, "course_id": course_id},
+            func=lambda: self._enroll_once(db, student_id, course_id),
+        )
+
+    def _enroll_once(self, db: Session, student_id: int, course_id: int) -> EnrollmentResponse:
+        """Execute a single enrollment transaction attempt."""
         with db.begin():
             student = self.student_repository.get_by_id_for_update(db, student_id)
             if student is None:
@@ -107,6 +123,14 @@ class EnrollmentService:
 
     def cancel(self, db: Session, student_id: int, course_id: int) -> CancelEnrollmentResponse:
         """Cancel a student's enrollment and decrement enrolled count safely."""
+        return self._run_with_lock_retry(
+            operation="cancel",
+            details={"student_id": student_id, "course_id": course_id},
+            func=lambda: self._cancel_once(db, student_id, course_id),
+        )
+
+    def _cancel_once(self, db: Session, student_id: int, course_id: int) -> CancelEnrollmentResponse:
+        """Execute a single cancellation transaction attempt."""
         with db.begin():
             student = self.student_repository.get_by_id_for_update(db, student_id)
             if student is None:
@@ -137,3 +161,45 @@ class EnrollmentService:
             db.flush()
 
         return CancelEnrollmentResponse(student_id=student_id, course_id=course_id, canceled=True)
+
+    def _run_with_lock_retry(
+        self,
+        *,
+        operation: str,
+        details: dict[str, object],
+        func: Callable[[], _T],
+    ) -> _T:
+        """Retry transaction when MySQL lock timeout/deadlock is detected."""
+        for attempt in range(1, MAX_LOCK_RETRY_ATTEMPTS + 1):
+            try:
+                return func()
+            except OperationalError as exc:
+                db_error_code = _db_error_code(exc)
+                if db_error_code not in RETRYABLE_LOCK_ERROR_CODES:
+                    raise
+                if attempt >= MAX_LOCK_RETRY_ATTEMPTS:
+                    raise ConflictException(
+                        code="CONCURRENCY_RETRY_EXHAUSTED",
+                        message="Concurrent update conflict. Please retry.",
+                        details={
+                            **details,
+                            "operation": operation,
+                            "attempts": attempt,
+                            "db_error_code": db_error_code,
+                        },
+                    ) from exc
+                time.sleep(LOCK_RETRY_BACKOFF_SECONDS * attempt)
+
+        raise RuntimeError("Unreachable retry state")
+
+
+def _db_error_code(exc: OperationalError) -> int | None:
+    """Extract MySQL DB-API error code from SQLAlchemy OperationalError."""
+    original = getattr(exc, "orig", None)
+    args = getattr(original, "args", ())
+    if not args:
+        return None
+    try:
+        return int(args[0])
+    except (TypeError, ValueError):
+        return None
