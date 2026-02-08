@@ -1,13 +1,14 @@
 openapi: 3.0.3
 info:
-  title: 대학교 수강신청 API
-  version: 1.0.0
+  title: 대학 수강신청 API
+  version: 1.1.0
   description: |
-    수강신청 시스템 백엔드 API 명세입니다.
-    본 문서는 평가자가 문서만으로 테스트를 작성할 수 있도록 요청/응답/에러를 명시합니다.
+    수강신청 백엔드 API 명세입니다.
+    목록 조회는 커서 기반 페이지네이션(limit + cursor)을 사용합니다.
 servers:
   - url: http://localhost:8000
     description: 로컬 개발 서버
+
 tags:
   - name: health
     description: 서버 상태 확인
@@ -19,19 +20,20 @@ tags:
     description: 강좌 조회
   - name: enrollments
     description: 수강신청 및 수강취소
+
 paths:
   /health:
     get:
       tags: [health]
       summary: 헬스체크
-      description: 서버 기동 상태와 초기 데이터 생성 상태를 반환합니다.
+      description: 서버 상태와 초기 데이터 생성 상태를 반환합니다.
       responses:
-        "200":
+        '200':
           description: 정상 응답
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
+                $ref: '#/components/schemas/HealthResponse'
               examples:
                 success:
                   value:
@@ -50,35 +52,38 @@ paths:
     get:
       tags: [students]
       summary: 학생 목록 조회
+      description: 학생 목록을 ID 오름차순으로 커서 기반 조회합니다.
       parameters:
-        - in: query
-          name: limit
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 500
-            default: 100
-          description: 조회 개수
-        - in: query
-          name: offset
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-          description: 조회 시작 위치
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
       responses:
-        "200":
+        '200':
           description: 정상 응답
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/StudentResponse"
-        "400":
-          $ref: "#/components/responses/InvalidRequest"
+                $ref: '#/components/schemas/StudentListResponse'
+              examples:
+                first_page:
+                  value:
+                    items:
+                      - id: 1
+                        student_no: '2026000001'
+                        name: 김민준
+                        department_id: 1
+                        grade: 2
+                    next_cursor: 1
+                last_page:
+                  value:
+                    items:
+                      - id: 10000
+                        student_no: '2026010000'
+                        name: 최지우
+                        department_id: 7
+                        grade: 4
+                    next_cursor: null
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
 
   /api/students/{student_id}/timetable:
     get:
@@ -93,64 +98,70 @@ paths:
             minimum: 1
           description: 학생 ID
       responses:
-        "200":
+        '200':
           description: 정상 응답
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/CourseResponse"
-        "404":
+                  $ref: '#/components/schemas/CourseResponse'
+              examples:
+                sample:
+                  value:
+                    - id: 101
+                      name: 자료구조 01분반
+                      credits: 3
+                      capacity: 40
+                      enrolled: 38
+                      schedule: 월 09:00-10:15
+                      department_id: 1
+                      professor_id: 12
+        '404':
           description: 학생 없음
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
               examples:
                 student_not_found:
-                  value:
-                    code: STUDENT_NOT_FOUND
-                    message: Student not found.
-                    details:
-                      student_id: 999999
+                  $ref: '#/components/examples/StudentNotFound'
 
   /api/professors:
     get:
       tags: [professors]
       summary: 교수 목록 조회
+      description: 교수 목록을 ID 오름차순으로 커서 기반 조회합니다.
       parameters:
-        - in: query
-          name: limit
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 500
-            default: 100
-        - in: query
-          name: offset
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
       responses:
-        "200":
+        '200':
           description: 정상 응답
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ProfessorResponse"
-        "400":
-          $ref: "#/components/responses/InvalidRequest"
+                $ref: '#/components/schemas/ProfessorListResponse'
+              examples:
+                first_page:
+                  value:
+                    items:
+                      - id: 1
+                        professor_no: PF000001
+                        name: 박서준
+                        email: prof0001@univ.ac.kr
+                        department_id: 1
+                    next_cursor: 1
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
 
   /api/courses:
     get:
       tags: [courses]
       summary: 강좌 목록 조회 (전체/학과별)
+      description: |
+        강좌 목록을 ID 오름차순으로 커서 기반 조회합니다.
+        `department_id`가 있으면 해당 학과 강좌만 조회합니다.
       parameters:
         - in: query
           name: department_id
@@ -158,44 +169,43 @@ paths:
           schema:
             type: integer
             minimum: 1
-          description: 학과 ID(없으면 전체 조회)
-        - in: query
-          name: limit
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 500
-            default: 100
-        - in: query
-          name: offset
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
+          description: 학과 ID
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
       responses:
-        "200":
+        '200':
           description: 정상 응답
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/CourseResponse"
+                $ref: '#/components/schemas/CourseListResponse'
               examples:
-                sample:
+                first_page:
                   value:
-                    - id: 1
-                      name: 자료구조 01분반
-                      credits: 3
-                      capacity: 30
-                      enrolled: 25
-                      schedule: 월 09:00-10:30
-                      department_id: 1
-                      professor_id: 1
-        "400":
-          $ref: "#/components/responses/InvalidRequest"
+                    items:
+                      - id: 1
+                        name: 자료구조 01분반
+                        credits: 3
+                        capacity: 40
+                        enrolled: 38
+                        schedule: 월 09:00-10:15
+                        department_id: 1
+                        professor_id: 3
+                    next_cursor: 1
+                filtered:
+                  value:
+                    items:
+                      - id: 15
+                        name: 운영체제 01분반
+                        credits: 3
+                        capacity: 35
+                        enrolled: 27
+                        schedule: 화 13:00-14:15
+                        department_id: 1
+                        professor_id: 9
+                    next_cursor: 15
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
 
   /api/enrollments:
     post:
@@ -206,78 +216,53 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EnrollmentRequest"
+              $ref: '#/components/schemas/EnrollmentRequest'
             examples:
               sample:
                 value:
                   student_id: 1
                   course_id: 10
       responses:
-        "200":
+        '200':
           description: 신청 성공
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EnrollmentResponse"
-        "400":
-          $ref: "#/components/responses/InvalidRequest"
-        "404":
+                $ref: '#/components/schemas/EnrollmentResponse'
+              examples:
+                success:
+                  value:
+                    student_id: 1
+                    course_id: 10
+                    enrolled_at: '2026-02-08T06:20:00.000000'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '404':
           description: 학생/강좌 없음
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
               examples:
                 student_not_found:
-                  value:
-                    code: STUDENT_NOT_FOUND
-                    message: Student not found.
-                    details:
-                      student_id: 999999
+                  $ref: '#/components/examples/StudentNotFound'
                 course_not_found:
-                  value:
-                    code: COURSE_NOT_FOUND
-                    message: Course not found.
-                    details:
-                      course_id: 999999
-        "409":
+                  $ref: '#/components/examples/CourseNotFound'
+        '409':
           description: 비즈니스 규칙 위반
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
               examples:
                 already_enrolled:
-                  value:
-                    code: ALREADY_ENROLLED
-                    message: Student already enrolled in this course.
-                    details:
-                      student_id: 1
-                      course_id: 10
+                  $ref: '#/components/examples/AlreadyEnrolled'
                 course_full:
-                  value:
-                    code: COURSE_FULL
-                    message: Course capacity is full.
-                    details:
-                      course_id: 10
-                      capacity: 30
+                  $ref: '#/components/examples/CourseFull'
                 credit_limit_exceeded:
-                  value:
-                    code: CREDIT_LIMIT_EXCEEDED
-                    message: Credit limit exceeded.
-                    details:
-                      student_id: 1
-                      current_credits: 18
-                      new_course_credits: 3
-                      max_credits: 18
+                  $ref: '#/components/examples/CreditLimitExceeded'
                 schedule_conflict:
-                  value:
-                    code: SCHEDULE_CONFLICT
-                    message: Schedule conflict detected.
-                    details:
-                      student_id: 1
-                      course_id: 12
-                      conflict_course_id: 8
+                  $ref: '#/components/examples/ScheduleConflict'
 
   /api/enrollments/{student_id}/{course_id}:
     delete:
@@ -290,49 +275,130 @@ paths:
           schema:
             type: integer
             minimum: 1
+          description: 학생 ID
         - in: path
           name: course_id
           required: true
           schema:
             type: integer
             minimum: 1
+          description: 강좌 ID
       responses:
-        "200":
+        '200':
           description: 취소 성공
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CancelEnrollmentResponse"
-        "404":
+                $ref: '#/components/schemas/CancelEnrollmentResponse'
+              examples:
+                success:
+                  value:
+                    student_id: 1
+                    course_id: 10
+                    canceled: true
+        '404':
           description: 학생/강좌/수강내역 없음
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
               examples:
+                student_not_found:
+                  $ref: '#/components/examples/StudentNotFound'
+                course_not_found:
+                  $ref: '#/components/examples/CourseNotFound'
                 enrollment_not_found:
-                  value:
-                    code: ENROLLMENT_NOT_FOUND
-                    message: Enrollment not found.
-                    details:
-                      student_id: 1
-                      course_id: 10
+                  $ref: '#/components/examples/EnrollmentNotFound'
 
 components:
+  parameters:
+    LimitParam:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+      description: 한 번에 조회할 최대 개수
+    CursorParam:
+      in: query
+      name: cursor
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+      description: 이전 페이지의 next_cursor 값
+
   responses:
     InvalidRequest:
       description: 요청 검증 실패
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ErrorResponse"
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             invalid_request:
-              value:
-                code: INVALID_REQUEST
-                message: Request validation failed.
-                details:
-                  errors: []
+              $ref: '#/components/examples/InvalidRequest'
+
+  examples:
+    InvalidRequest:
+      value:
+        code: INVALID_REQUEST
+        message: Request validation failed.
+        details:
+          errors: []
+    StudentNotFound:
+      value:
+        code: STUDENT_NOT_FOUND
+        message: Student not found.
+        details:
+          student_id: 999999
+    CourseNotFound:
+      value:
+        code: COURSE_NOT_FOUND
+        message: Course not found.
+        details:
+          course_id: 999999
+    EnrollmentNotFound:
+      value:
+        code: ENROLLMENT_NOT_FOUND
+        message: Enrollment not found.
+        details:
+          student_id: 1
+          course_id: 10
+    AlreadyEnrolled:
+      value:
+        code: ALREADY_ENROLLED
+        message: Student already enrolled in this course.
+        details:
+          student_id: 1
+          course_id: 10
+    CourseFull:
+      value:
+        code: COURSE_FULL
+        message: Course capacity is full.
+        details:
+          course_id: 10
+          capacity: 30
+    CreditLimitExceeded:
+      value:
+        code: CREDIT_LIMIT_EXCEEDED
+        message: Credit limit exceeded.
+        details:
+          student_id: 1
+          current_credits: 18
+          new_course_credits: 3
+          max_credits: 18
+    ScheduleConflict:
+      value:
+        code: SCHEDULE_CONFLICT
+        message: Schedule conflict detected.
+        details:
+          student_id: 1
+          course_id: 12
+          conflict_course_id: 8
 
   schemas:
     HealthResponse:
@@ -370,7 +436,7 @@ components:
           example: 1
         student_no:
           type: string
-          example: "2026000001"
+          example: '2026000001'
         name:
           type: string
           example: 김민준
@@ -380,6 +446,20 @@ components:
         grade:
           type: integer
           example: 2
+
+    StudentListResponse:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentResponse'
+        next_cursor:
+          type: integer
+          nullable: true
+          description: 다음 페이지 조회용 커서 (마지막 페이지면 null)
+          example: 100
 
     ProfessorResponse:
       type: object
@@ -393,7 +473,7 @@ components:
           example: PF000001
         name:
           type: string
-          example: 박서연
+          example: 박서준
         email:
           type: string
           format: email
@@ -402,10 +482,23 @@ components:
           type: integer
           example: 1
 
+    ProfessorListResponse:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfessorResponse'
+        next_cursor:
+          type: integer
+          nullable: true
+          description: 다음 페이지 조회용 커서 (마지막 페이지면 null)
+          example: 100
+
     CourseResponse:
       type: object
-      required:
-        [id, name, credits, capacity, enrolled, schedule, department_id, professor_id]
+      required: [id, name, credits, capacity, enrolled, schedule, department_id, professor_id]
       properties:
         id:
           type: integer
@@ -418,19 +511,33 @@ components:
           example: 3
         capacity:
           type: integer
-          example: 30
+          example: 40
         enrolled:
           type: integer
-          example: 25
+          example: 38
         schedule:
           type: string
-          example: 월 09:00-10:30
+          example: 월 09:00-10:15
         department_id:
           type: integer
           example: 1
         professor_id:
           type: integer
-          example: 1
+          example: 3
+
+    CourseListResponse:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseResponse'
+        next_cursor:
+          type: integer
+          nullable: true
+          description: 다음 페이지 조회용 커서 (마지막 페이지면 null)
+          example: 100
 
     EnrollmentRequest:
       type: object
@@ -458,7 +565,7 @@ components:
         enrolled_at:
           type: string
           format: date-time
-          example: "2026-02-08T06:20:00.000000Z"
+          example: '2026-02-08T06:20:00.000000'
 
     CancelEnrollmentResponse:
       type: object
