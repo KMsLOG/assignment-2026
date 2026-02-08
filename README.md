@@ -14,6 +14,17 @@ Copy-Item .env.example .env
 - `MYSQL_ROOT_PASSWORD`
 - `MYSQL_PASSWORD`
 
+`.env` 예시:
+```dotenv
+MYSQL_ROOT_PASSWORD=change-me-root-password
+MYSQL_DATABASE=course_registration
+MYSQL_USER=app
+MYSQL_PASSWORD=change-me-app-password
+```
+
+주의:
+- `.env`는 민감 정보가 포함되므로 Git에 커밋하지 않습니다.
+
 3. Docker 이미지 빌드 및 컨테이너 준비
 ```bash
 docker compose build
