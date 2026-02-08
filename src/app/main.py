@@ -1,6 +1,7 @@
 """Application entrypoint and startup lifecycle configuration."""
 
 from contextlib import asynccontextmanager
+import os
 from threading import Lock
 import time
 
@@ -14,10 +15,18 @@ from app.api.health import router as health_router
 from app.api.professors import router as professors_router
 from app.api.students import router as students_router
 from app.core.exception_handler import register_exception_handlers
+from app.core.observability import configure_logging, register_request_middleware
 from app.repository.database import SessionLocal, wait_for_database
 from app.services.seed_service import seed_runtime_data
 
 _startup_lock = Lock()
+
+
+def _cors_origins_from_env() -> list[str]:
+    """Parse CORS origins from CORS_ALLOW_ORIGINS env."""
+    raw = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:8000,http://localhost:3000")
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return origins or ["http://localhost:8000"]
 
 
 def _initialize_runtime_state(target_app: FastAPI) -> None:
@@ -57,15 +66,18 @@ app.state.seed_status = {
     "counts": {},
 }
 
-origins = ["*"]
+origins = _cors_origins_from_env()
+allow_credentials = "*" not in origins
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+configure_logging()
+register_request_middleware(app)
 register_exception_handlers(app)
 app.include_router(health_router)
 app.include_router(students_router)

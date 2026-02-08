@@ -4,8 +4,10 @@ import re
 
 
 def test_health_returns_seed_status(client) -> None:
-    response = client.get("/health")
+    response = client.get("/health", headers={"X-Request-Id": "test-health-req"})
     assert response.status_code == 200
+    assert response.headers["X-Request-Id"] == "test-health-req"
+    assert int(response.headers["X-Process-Time-Ms"]) >= 0
     body = response.json()
     assert body["status"] == "ok"
     assert body["seed"]["completed"] is True
