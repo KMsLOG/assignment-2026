@@ -1,3 +1,5 @@
+"""Course-related API endpoints."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -22,6 +24,7 @@ def list_courses(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     cursor: Annotated[int | None, Query(ge=1)] = None,
 ) -> CourseListResponse:
+    """List courses optionally filtered by department, with cursor pagination."""
     return catalog_service.list_courses(
         db=db,
         limit=limit,

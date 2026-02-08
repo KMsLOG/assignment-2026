@@ -1,3 +1,5 @@
+"""Application entrypoint and startup lifecycle configuration."""
+
 import time
 
 from fastapi import FastAPI
@@ -40,6 +42,7 @@ app.include_router(enrollments_router)
 
 @app.on_event("startup")
 def startup() -> None:
+    """Wait for DB readiness and seed runtime data before serving traffic."""
     started_at = time.perf_counter()
     wait_for_database(max_wait_seconds=50)
     with SessionLocal() as db:

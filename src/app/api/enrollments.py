@@ -1,3 +1,5 @@
+"""Enrollment API endpoints for apply/cancel flows."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -29,6 +31,7 @@ def enroll(
     db: Annotated[Session, Depends(get_db)],
     enrollment_service: Annotated[EnrollmentService, Depends(get_enrollment_service)],
 ) -> EnrollmentResponse:
+    """Submit an enrollment request for a student and course."""
     return enrollment_service.enroll(db, request.student_id, request.course_id)
 
 
@@ -43,4 +46,5 @@ def cancel_enrollment(
     db: Annotated[Session, Depends(get_db)],
     enrollment_service: Annotated[EnrollmentService, Depends(get_enrollment_service)],
 ) -> CancelEnrollmentResponse:
+    """Cancel an existing enrollment for a student and course."""
     return enrollment_service.cancel(db, student_id, course_id)

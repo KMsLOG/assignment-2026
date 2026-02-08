@@ -1,3 +1,5 @@
+"""Student-related API endpoints."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -21,6 +23,7 @@ def list_students(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     cursor: Annotated[int | None, Query(ge=1)] = None,
 ) -> StudentListResponse:
+    """List students with cursor-based pagination."""
     return catalog_service.list_students(db, limit, cursor)
 
 
@@ -34,4 +37,5 @@ def get_timetable(
     db: Annotated[Session, Depends(get_db)],
     catalog_service: Annotated[CatalogService, Depends(get_catalog_service)],
 ) -> list[CourseResponse]:
+    """Return the current semester timetable for a single student."""
     return catalog_service.get_student_timetable(db, student_id)
