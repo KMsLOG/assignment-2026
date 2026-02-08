@@ -1,6 +1,7 @@
 """Enrollment service implementing registration business rules."""
 
 from datetime import datetime
+import os
 import time
 from typing import Callable, TypeVar
 
@@ -16,10 +17,34 @@ from app.repository.student_repository import StudentRepository
 
 MAX_CREDITS_PER_STUDENT = 18
 RETRYABLE_LOCK_ERROR_CODES = {1205, 1213}
-MAX_LOCK_RETRY_ATTEMPTS = 3
-LOCK_RETRY_BACKOFF_SECONDS = 0.05
+DEFAULT_LOCK_RETRY_ATTEMPTS = 3
+DEFAULT_LOCK_RETRY_BACKOFF_SECONDS = 0.05
 
 _T = TypeVar("_T")
+
+
+def _int_env(name: str, default: int) -> int:
+    """Read a positive integer environment variable with fallback."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _float_env(name: str, default: float) -> float:
+    """Read a non-negative float environment variable with fallback."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value >= 0 else default
 
 
 def _is_time_conflict(a_start, a_end, b_start, b_end) -> bool:
@@ -170,14 +195,20 @@ class EnrollmentService:
         func: Callable[[], _T],
     ) -> _T:
         """Retry transaction when MySQL lock timeout/deadlock is detected."""
-        for attempt in range(1, MAX_LOCK_RETRY_ATTEMPTS + 1):
+        max_attempts = _int_env("ENROLLMENT_LOCK_RETRY_ATTEMPTS", DEFAULT_LOCK_RETRY_ATTEMPTS)
+        backoff_seconds = _float_env(
+            "ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS",
+            DEFAULT_LOCK_RETRY_BACKOFF_SECONDS,
+        )
+
+        for attempt in range(1, max_attempts + 1):
             try:
                 return func()
             except OperationalError as exc:
                 db_error_code = _db_error_code(exc)
                 if db_error_code not in RETRYABLE_LOCK_ERROR_CODES:
                     raise
-                if attempt >= MAX_LOCK_RETRY_ATTEMPTS:
+                if attempt >= max_attempts:
                     raise ConflictException(
                         code="CONCURRENCY_RETRY_EXHAUSTED",
                         message="Concurrent update conflict. Please retry.",
@@ -188,7 +219,7 @@ class EnrollmentService:
                             "db_error_code": db_error_code,
                         },
                     ) from exc
-                time.sleep(LOCK_RETRY_BACKOFF_SECONDS * attempt)
+                time.sleep(backoff_seconds * attempt)
 
         raise RuntimeError("Unreachable retry state")
 

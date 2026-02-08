@@ -258,6 +258,45 @@ def test_retry_recovers_from_single_deadlock(monkeypatch, test_data_factory) -> 
     assert calls["count"] == 2
 
 
+def test_retry_recovers_from_single_lock_timeout(monkeypatch, test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    student_id = test_data_factory.create_student(department_id)
+    course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=3,
+        capacity=30,
+        schedule_day="WED",
+        start_time=time(11, 0),
+        end_time=time(12, 30),
+    )
+
+    service = EnrollmentService()
+    original_get_for_update = service.course_repository.get_by_id_for_update
+    calls = {"count": 0}
+
+    def flaky_get_for_update(db, lookup_course_id):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise OperationalError(
+                "SELECT ... FOR UPDATE",
+                {},
+                _FakeMySQLError(1205, "Lock wait timeout exceeded"),
+            )
+        return original_get_for_update(db, lookup_course_id)
+
+    monkeypatch.setattr(service.course_repository, "get_by_id_for_update", flaky_get_for_update)
+    monkeypatch.setattr("app.services.enrollment_service.time.sleep", lambda _: None)
+
+    with SessionLocal() as db:
+        result = service.enroll(db, student_id, course_id)
+
+    assert result.student_id == student_id
+    assert result.course_id == course_id
+    assert calls["count"] == 2
+
+
 def test_retry_exhaustion_returns_conflict(monkeypatch, test_data_factory) -> None:
     department_id = test_data_factory.create_department()
     professor_id = test_data_factory.create_professor(department_id)
@@ -290,4 +329,41 @@ def test_retry_exhaustion_returns_conflict(monkeypatch, test_data_factory) -> No
 
     assert caught.value.code == "CONCURRENCY_RETRY_EXHAUSTED"
     assert caught.value.details["attempts"] == 3
+    assert caught.value.details["db_error_code"] == 1213
+
+
+def test_retry_exhaustion_uses_env_attempts(monkeypatch, test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    student_id = test_data_factory.create_student(department_id)
+    course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=3,
+        capacity=30,
+        schedule_day="FRI",
+        start_time=time(9, 0),
+        end_time=time(10, 30),
+    )
+
+    service = EnrollmentService()
+    monkeypatch.setenv("ENROLLMENT_LOCK_RETRY_ATTEMPTS", "2")
+    monkeypatch.setenv("ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS", "0")
+
+    def always_deadlock(_, __):
+        raise OperationalError(
+            "SELECT ... FOR UPDATE",
+            {},
+            _FakeMySQLError(1213, "Deadlock found when trying to get lock"),
+        )
+
+    monkeypatch.setattr(service.course_repository, "get_by_id_for_update", always_deadlock)
+    monkeypatch.setattr("app.services.enrollment_service.time.sleep", lambda _: None)
+
+    with SessionLocal() as db:
+        with pytest.raises(ConflictException) as caught:
+            service.enroll(db, student_id, course_id)
+
+    assert caught.value.code == "CONCURRENCY_RETRY_EXHAUSTED"
+    assert caught.value.details["attempts"] == 2
     assert caught.value.details["db_error_code"] == 1213
