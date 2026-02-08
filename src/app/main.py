@@ -86,10 +86,5 @@ app.include_router(courses_router)
 app.include_router(enrollments_router)
 
 
-def startup() -> None:
-    """Compatibility helper for test setup."""
-    _initialize_runtime_state(app)
-
-
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

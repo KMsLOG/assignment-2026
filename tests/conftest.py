@@ -37,18 +37,13 @@ os.environ.setdefault("DB_NAME", os.environ.get("MYSQL_DATABASE", "course_regist
 os.environ.setdefault("DB_USER", os.environ.get("MYSQL_USER", "app"))
 os.environ.setdefault("DB_PASSWORD", os.environ.get("MYSQL_PASSWORD", "app"))
 
-from app.main import app, startup
+from app.main import app
 from app.repository.database import SessionLocal
 from app.repository.models import Course, Department, Enrollment, Professor, Student
 
 
-@pytest.fixture(scope="session", autouse=True)
-def ensure_seeded_database() -> None:
-    startup()
-
-
 @pytest.fixture(scope="session")
-def client(ensure_seeded_database: None) -> TestClient:
+def client() -> TestClient:
     with TestClient(app) as test_client:
         yield test_client
 
