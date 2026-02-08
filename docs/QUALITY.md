@@ -7,6 +7,7 @@
 - FastAPI의 deprecated startup 이벤트를 제거하고 lifespan 초기화로 전환했습니다.
 - 동일 프로세스에서 중복 seed 작업이 발생하지 않도록 초기화 구간에 락을 적용했습니다.
 - 앱 프로세스 관점에서 런타임 초기화가 멱등적으로 동작하도록 구성했습니다.
+- 수강신청/취소 트랜잭션에서 데드락/락 대기 타임아웃 발생 시 자동 재시도 전략을 적용했습니다.
 
 관련 파일:
 - `src/app/main.py`
@@ -27,6 +28,7 @@
 
 검증:
 - `tests/test_catalog_api.py`
+- `tests/test_enrollment_rules.py`
 
 ## 3. 보안 기본기
 

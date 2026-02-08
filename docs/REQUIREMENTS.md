@@ -83,6 +83,8 @@
 - MySQL(InnoDB) 트랜잭션 사용
 - 수강신청/취소 시 `students`, `courses` 대상 `SELECT ... FOR UPDATE` 적용
 - 검증 + 상태 변경을 단일 트랜잭션으로 수행
+- 데드락/락 대기 타임아웃(MySQL 1213/1205) 발생 시 짧은 백오프로 자동 재시도
+- 재시도 소진 시 `409 CONCURRENCY_RETRY_EXHAUSTED`로 명시적 실패 응답
 
 ### 5.3 검증 기준
 - 잔여 1석 동시 요청에서 성공 1건, 실패 N-1건
@@ -133,6 +135,7 @@
 - `COURSE_FULL` (409)
 - `CREDIT_LIMIT_EXCEEDED` (409)
 - `SCHEDULE_CONFLICT` (409)
+- `CONCURRENCY_RETRY_EXHAUSTED` (409)
 - `INTERNAL_SERVER_ERROR` (500)
 
 ## 8. 운영/보안/관측성 요구(추가 평가 대응)

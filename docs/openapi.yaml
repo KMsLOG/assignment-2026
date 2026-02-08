@@ -263,6 +263,8 @@ paths:
                   $ref: '#/components/examples/CreditLimitExceeded'
                 schedule_conflict:
                   $ref: '#/components/examples/ScheduleConflict'
+                concurrency_retry_exhausted:
+                  $ref: '#/components/examples/ConcurrencyRetryExhausted'
 
   /api/enrollments/{student_id}/{course_id}:
     delete:
@@ -399,6 +401,16 @@ components:
           student_id: 1
           course_id: 12
           conflict_course_id: 8
+    ConcurrencyRetryExhausted:
+      value:
+        code: CONCURRENCY_RETRY_EXHAUSTED
+        message: Concurrent update conflict. Please retry.
+        details:
+          student_id: 1
+          course_id: 10
+          operation: enroll
+          attempts: 3
+          db_error_code: 1213
 
   schemas:
     HealthResponse:
