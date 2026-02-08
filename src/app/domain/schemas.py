@@ -54,6 +54,21 @@ class CourseResponse(BaseModel):
     professor_id: int
 
 
+class StudentListResponse(BaseModel):
+    items: list[StudentResponse]
+    next_cursor: int | None
+
+
+class ProfessorListResponse(BaseModel):
+    items: list[ProfessorResponse]
+    next_cursor: int | None
+
+
+class CourseListResponse(BaseModel):
+    items: list[CourseResponse]
+    next_cursor: int | None
+
+
 class EnrollmentRequest(BaseModel):
     student_id: int = Field(ge=1)
     course_id: int = Field(ge=1)

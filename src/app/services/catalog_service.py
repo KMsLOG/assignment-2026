@@ -1,7 +1,15 @@
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundException
-from app.domain.schemas import CourseResponse, ProfessorResponse, StudentResponse, format_schedule
+from app.domain.schemas import (
+    CourseListResponse,
+    CourseResponse,
+    ProfessorListResponse,
+    ProfessorResponse,
+    StudentListResponse,
+    StudentResponse,
+    format_schedule,
+)
 from app.repository.course_repository import CourseRepository
 from app.repository.enrollment_repository import EnrollmentRepository
 from app.repository.professor_repository import ProfessorRepository
@@ -15,23 +23,38 @@ class CatalogService:
         self.course_repository = CourseRepository()
         self.enrollment_repository = EnrollmentRepository()
 
-    def list_students(self, db: Session, limit: int, offset: int) -> list[StudentResponse]:
-        students = self.student_repository.list_students(db, limit, offset)
-        return [StudentResponse.model_validate(student) for student in students]
+    def list_students(self, db: Session, limit: int, cursor: int | None) -> StudentListResponse:
+        students = self.student_repository.list_students(db, limit, cursor)
+        has_next = len(students) > limit
+        students_page = students[:limit]
+        return StudentListResponse(
+            items=[StudentResponse.model_validate(student) for student in students_page],
+            next_cursor=students_page[-1].id if has_next and students_page else None,
+        )
 
-    def list_professors(self, db: Session, limit: int, offset: int) -> list[ProfessorResponse]:
-        professors = self.professor_repository.list_professors(db, limit, offset)
-        return [ProfessorResponse.model_validate(professor) for professor in professors]
+    def list_professors(self, db: Session, limit: int, cursor: int | None) -> ProfessorListResponse:
+        professors = self.professor_repository.list_professors(db, limit, cursor)
+        has_next = len(professors) > limit
+        professors_page = professors[:limit]
+        return ProfessorListResponse(
+            items=[ProfessorResponse.model_validate(professor) for professor in professors_page],
+            next_cursor=professors_page[-1].id if has_next and professors_page else None,
+        )
 
     def list_courses(
         self,
         db: Session,
         limit: int,
-        offset: int,
+        cursor: int | None,
         department_id: int | None = None,
-    ) -> list[CourseResponse]:
-        courses = self.course_repository.list_courses(db, limit, offset, department_id)
-        return [self._course_to_response(course) for course in courses]
+    ) -> CourseListResponse:
+        courses = self.course_repository.list_courses(db, limit, cursor, department_id)
+        has_next = len(courses) > limit
+        courses_page = courses[:limit]
+        return CourseListResponse(
+            items=[self._course_to_response(course) for course in courses_page],
+            next_cursor=courses_page[-1].id if has_next and courses_page else None,
+        )
 
     def get_student_timetable(self, db: Session, student_id: int) -> list[CourseResponse]:
         student = self.student_repository.get_by_id(db, student_id)

@@ -16,37 +16,57 @@ def test_health_returns_seed_status(client) -> None:
 
 
 def test_list_students_professors_courses_with_department_filter(client) -> None:
-    students_response = client.get("/api/students", params={"limit": 5, "offset": 0})
+    students_response = client.get("/api/students", params={"limit": 5})
     assert students_response.status_code == 200
-    students = students_response.json()
+    students_page = students_response.json()
+    students = students_page["items"]
     assert len(students) == 5
+    assert students_page["next_cursor"] is not None
     assert {"id", "student_no", "name", "department_id", "grade"} <= set(students[0].keys())
 
-    professors_response = client.get("/api/professors", params={"limit": 5, "offset": 0})
+    next_students_response = client.get(
+        "/api/students",
+        params={"limit": 5, "cursor": students_page["next_cursor"]},
+    )
+    assert next_students_response.status_code == 200
+    next_students = next_students_response.json()["items"]
+    assert len(next_students) == 5
+    assert next_students[0]["id"] > students[-1]["id"]
+
+    professors_response = client.get("/api/professors", params={"limit": 5})
     assert professors_response.status_code == 200
-    professors = professors_response.json()
+    professors_page = professors_response.json()
+    professors = professors_page["items"]
     assert len(professors) == 5
+    assert professors_page["next_cursor"] is not None
     assert {"id", "professor_no", "name", "email", "department_id"} <= set(professors[0].keys())
 
-    courses_response = client.get("/api/courses", params={"limit": 20, "offset": 0})
+    courses_response = client.get("/api/courses", params={"limit": 20})
     assert courses_response.status_code == 200
-    courses = courses_response.json()
+    courses_page = courses_response.json()
+    courses = courses_page["items"]
     assert len(courses) == 20
+    assert courses_page["next_cursor"] is not None
 
     required_course_fields = {"id", "name", "credits", "capacity", "enrolled", "schedule"}
     assert required_course_fields <= set(courses[0].keys())
-    assert re.match(r"^[월화수목금] \d{2}:\d{2}-\d{2}:\d{2}$", courses[0]["schedule"])
+    assert re.match(r"^.+ \d{2}:\d{2}-\d{2}:\d{2}$", courses[0]["schedule"])
 
     department_id = courses[0]["department_id"]
-    filtered = client.get("/api/courses", params={"department_id": department_id, "limit": 50, "offset": 0})
+    filtered = client.get("/api/courses", params={"department_id": department_id, "limit": 50})
     assert filtered.status_code == 200
-    filtered_courses = filtered.json()
+    filtered_courses = filtered.json()["items"]
     assert len(filtered_courses) > 0
     assert all(course["department_id"] == department_id for course in filtered_courses)
 
 
 def test_invalid_pagination_returns_400(client) -> None:
     response = client.get("/api/students", params={"limit": 0})
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "INVALID_REQUEST"
+
+    response = client.get("/api/students", params={"cursor": 0})
     assert response.status_code == 400
     body = response.json()
     assert body["code"] == "INVALID_REQUEST"

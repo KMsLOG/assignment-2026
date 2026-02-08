@@ -9,13 +9,15 @@ class CourseRepository:
         self,
         db: Session,
         limit: int,
-        offset: int,
+        cursor: int | None,
         department_id: int | None = None,
     ) -> list[Course]:
         stmt = select(Course)
         if department_id is not None:
             stmt = stmt.where(Course.department_id == department_id)
-        stmt = stmt.order_by(Course.id).limit(limit).offset(offset)
+        if cursor is not None:
+            stmt = stmt.where(Course.id > cursor)
+        stmt = stmt.order_by(Course.id).limit(limit + 1)
         return list(db.scalars(stmt))
 
     def get_by_id(self, db: Session, course_id: int) -> Course | None:

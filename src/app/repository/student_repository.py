@@ -5,8 +5,11 @@ from app.repository.models import Student
 
 
 class StudentRepository:
-    def list_students(self, db: Session, limit: int, offset: int) -> list[Student]:
-        stmt = select(Student).order_by(Student.id).limit(limit).offset(offset)
+    def list_students(self, db: Session, limit: int, cursor: int | None) -> list[Student]:
+        stmt = select(Student)
+        if cursor is not None:
+            stmt = stmt.where(Student.id > cursor)
+        stmt = stmt.order_by(Student.id).limit(limit + 1)
         return list(db.scalars(stmt))
 
     def get_by_id(self, db: Session, student_id: int) -> Student | None:

@@ -5,6 +5,9 @@ from app.repository.models import Professor
 
 
 class ProfessorRepository:
-    def list_professors(self, db: Session, limit: int, offset: int) -> list[Professor]:
-        stmt = select(Professor).order_by(Professor.id).limit(limit).offset(offset)
+    def list_professors(self, db: Session, limit: int, cursor: int | None) -> list[Professor]:
+        stmt = select(Professor)
+        if cursor is not None:
+            stmt = stmt.where(Professor.id > cursor)
+        stmt = stmt.order_by(Professor.id).limit(limit + 1)
         return list(db.scalars(stmt))
