@@ -1,58 +1,81 @@
-# 프로젝트 빌드 방법
+# Project Build
 
-1. 환경 변수 파일 생성 (`.env`)
+1. Create an environment file from the template:
+
 ```bash
 cp .env.example .env
 ```
 
 Windows PowerShell:
+
 ```powershell
 Copy-Item .env.example .env
 ```
 
-2. `.env` 파일에서 민감 정보 수정
+2. Update sensitive values in `.env`:
 - `MYSQL_ROOT_PASSWORD`
 - `MYSQL_PASSWORD`
 
-`.env` 예시:
+Example:
+
 ```dotenv
 MYSQL_ROOT_PASSWORD=change-me-root-password
 MYSQL_DATABASE=course_registration
 MYSQL_USER=app
 MYSQL_PASSWORD=change-me-app-password
+APP_DEBUG=false
+LOG_LEVEL=INFO
+CORS_ALLOW_ORIGINS=http://localhost:8000,http://localhost:3000
 ```
 
-주의:
-- `.env`는 민감 정보가 포함되므로 Git에 커밋하지 않습니다.
+3. Build containers:
 
-3. Docker 이미지 빌드 및 컨테이너 준비
 ```bash
 docker compose build
 ```
 
-# 서버 실행 방법
+# Server Run
 
-앱과 DB를 함께 실행:
+Start all services:
+
 ```bash
 docker compose up -d
 ```
 
-상태 확인:
+Check status and logs:
+
 ```bash
 docker compose ps
 docker compose logs -f app
 docker compose logs -f mysql
 ```
 
-중지:
-```powershell
+Stop services:
+
+```bash
 docker compose down
 ```
 
-# API 서버 접속 정보 (포트 등)
+# API Access
 
-- API Base URL: `http://localhost:8000`
-- Port: `8000`
-- Health Check: `GET /health`
-- OpenAPI(Swagger): `docs/openapi.yaml`
-- MySQL Host(컨테이너 내부): `mysql:3306`
+- API base URL: `http://localhost:8000`
+- App port: `8000`
+- Health endpoint: `GET /health`
+- OpenAPI spec: `docs/openapi.yaml`
+- Quality notes: `docs/QUALITY.md`
+- MySQL host (inside compose network): `mysql:3306`
+
+# Operational Notes
+
+- Request tracing:
+  - Every response includes `X-Request-Id`
+  - Every response includes `X-Process-Time-Ms`
+- Structured request logs:
+  - Method, path, status, duration, request id are logged
+  - Log level is controlled by `LOG_LEVEL`
+- Error response hardening:
+  - By default, internal exception messages are not exposed
+  - Set `APP_DEBUG=true` only for local debugging
+- CORS configuration:
+  - Use `CORS_ALLOW_ORIGINS` as a comma-separated allowlist
+  - If `*` is included, credentialed CORS is disabled automatically
