@@ -3,9 +3,11 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import time
 
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.core.exceptions import ConflictException
+from app.main import app
 from app.repository.database import SessionLocal
 from app.repository.models import Course, Enrollment
 from app.services.enrollment_service import EnrollmentService
@@ -156,6 +158,50 @@ def test_concurrency_allows_only_one_success_for_one_remaining_seat(test_data_fa
 
     assert results.count("success") == 1
     assert results.count("conflict") == 29
+
+    with SessionLocal() as db:
+        enrolled = db.scalar(select(Course.enrolled).where(Course.id == course_id))
+        enrolled_rows = db.scalar(
+            select(func.count()).select_from(Enrollment).where(Enrollment.course_id == course_id)
+        )
+
+    assert enrolled == 1
+    assert enrolled_rows == 1
+
+
+def test_api_concurrency_allows_only_one_success_for_one_remaining_seat(test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=3,
+        capacity=1,
+        schedule_day="WED",
+        start_time=time(15, 0),
+        end_time=time(16, 30),
+    )
+
+    student_ids = [test_data_factory.create_student(department_id) for _ in range(20)]
+
+    def worker(student_id: int) -> str:
+        with TestClient(app) as local_client:
+            response = local_client.post(
+                "/api/enrollments",
+                json={"student_id": student_id, "course_id": course_id},
+            )
+
+        if response.status_code == 200:
+            return "success"
+        if response.status_code == 409 and response.json().get("code") == "COURSE_FULL":
+            return "course_full"
+        return f"unexpected:{response.status_code}:{response.text}"
+
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        results = list(executor.map(worker, student_ids))
+
+    assert results.count("success") == 1
+    assert results.count("course_full") == 19
 
     with SessionLocal() as db:
         enrolled = db.scalar(select(Course.enrolled).where(Course.id == course_id))

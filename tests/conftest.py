@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,28 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+
+
+def _load_env_file(path: Path) -> None:
+    """Load KEY=VALUE pairs into environment unless already set."""
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+for env_path in (ROOT / ".env", ROOT / ".env.example"):
+    if env_path.exists():
+        _load_env_file(env_path)
+        break
+
+os.environ.setdefault("DB_HOST", "127.0.0.1")
+os.environ.setdefault("DB_PORT", "3306")
+os.environ.setdefault("DB_NAME", os.environ.get("MYSQL_DATABASE", "course_registration"))
+os.environ.setdefault("DB_USER", os.environ.get("MYSQL_USER", "app"))
+os.environ.setdefault("DB_PASSWORD", os.environ.get("MYSQL_PASSWORD", "app"))
 
 from app.main import app, startup
 from app.repository.database import SessionLocal
