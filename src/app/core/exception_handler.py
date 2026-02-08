@@ -1,5 +1,6 @@
 """Global FastAPI exception handler registration."""
 
+import logging
 import os
 
 from fastapi import FastAPI, Request
@@ -8,6 +9,8 @@ from fastapi.responses import JSONResponse
 
 from app.core.exceptions import AppException
 from app.core.observability import request_id_from_request
+
+_logger = logging.getLogger("app.exception")
 
 
 def _debug_enabled() -> bool:
@@ -54,6 +57,14 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def unknown_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         """Catch unhandled exceptions and return a generic server error."""
         details = _with_request_id(request)
+        _logger.exception(
+            "Unhandled exception",
+            extra={
+                "request_id": details.get("request_id"),
+                "path": request.url.path,
+                "method": request.method,
+            },
+        )
         if _debug_enabled():
             details["error"] = str(exc)
 

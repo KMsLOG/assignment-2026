@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -43,3 +45,14 @@ def test_internal_error_includes_raw_exception_in_debug(monkeypatch) -> None:
     assert body["code"] == "INTERNAL_SERVER_ERROR"
     assert body["details"]["request_id"] == "err-debug"
     assert "boom" in body["details"]["error"]
+
+
+def test_internal_error_logs_stacktrace(caplog) -> None:
+    app = _build_error_app()
+
+    with caplog.at_level(logging.ERROR, logger="app.exception"):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/boom", headers={"X-Request-Id": "err-log"})
+
+    assert response.status_code == 500
+    assert any(record.exc_info is not None for record in caplog.records)
