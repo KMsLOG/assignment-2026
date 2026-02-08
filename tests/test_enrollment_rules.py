@@ -1,0 +1,167 @@
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from datetime import time
+
+from sqlalchemy import func, select
+
+from app.core.exceptions import ConflictException
+from app.repository.database import SessionLocal
+from app.repository.models import Course, Enrollment
+from app.services.enrollment_service import EnrollmentService
+
+
+def test_enroll_cancel_and_timetable_flow(client, test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    student_id = test_data_factory.create_student(department_id)
+    course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=3,
+        capacity=30,
+        schedule_day="MON",
+        start_time=time(9, 0),
+        end_time=time(10, 30),
+    )
+
+    enroll = client.post("/api/enrollments", json={"student_id": student_id, "course_id": course_id})
+    assert enroll.status_code == 200
+    enroll_body = enroll.json()
+    assert enroll_body["student_id"] == student_id
+    assert enroll_body["course_id"] == course_id
+
+    duplicate = client.post("/api/enrollments", json={"student_id": student_id, "course_id": course_id})
+    assert duplicate.status_code == 409
+    assert duplicate.json()["code"] == "ALREADY_ENROLLED"
+
+    timetable = client.get(f"/api/students/{student_id}/timetable")
+    assert timetable.status_code == 200
+    assert any(course["id"] == course_id for course in timetable.json())
+
+    cancel = client.delete(f"/api/enrollments/{student_id}/{course_id}")
+    assert cancel.status_code == 200
+    assert cancel.json()["canceled"] is True
+
+    cancel_again = client.delete(f"/api/enrollments/{student_id}/{course_id}")
+    assert cancel_again.status_code == 404
+    assert cancel_again.json()["code"] == "ENROLLMENT_NOT_FOUND"
+
+
+def test_credit_limit_exceeded(client, test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    student_id = test_data_factory.create_student(department_id)
+
+    slots = [
+        ("MON", time(9, 0), time(10, 30)),
+        ("MON", time(10, 30), time(12, 0)),
+        ("MON", time(13, 0), time(14, 30)),
+        ("TUE", time(9, 0), time(10, 30)),
+        ("TUE", time(10, 30), time(12, 0)),
+        ("TUE", time(13, 0), time(14, 30)),
+    ]
+
+    course_ids: list[int] = []
+    for day, start, end in slots:
+        course_ids.append(
+            test_data_factory.create_course(
+                department_id=department_id,
+                professor_id=professor_id,
+                credits=3,
+                capacity=30,
+                schedule_day=day,
+                start_time=start,
+                end_time=end,
+            )
+        )
+
+    extra_course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=1,
+        capacity=30,
+        schedule_day="WED",
+        start_time=time(9, 0),
+        end_time=time(10, 30),
+    )
+
+    for course_id in course_ids:
+        response = client.post("/api/enrollments", json={"student_id": student_id, "course_id": course_id})
+        assert response.status_code == 200
+
+    overflow = client.post("/api/enrollments", json={"student_id": student_id, "course_id": extra_course_id})
+    assert overflow.status_code == 409
+    assert overflow.json()["code"] == "CREDIT_LIMIT_EXCEEDED"
+
+
+def test_schedule_conflict_with_one_minute_overlap(client, test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    student_id = test_data_factory.create_student(department_id)
+
+    first_course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=3,
+        capacity=30,
+        schedule_day="THU",
+        start_time=time(9, 0),
+        end_time=time(10, 30),
+    )
+    second_course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=2,
+        capacity=30,
+        schedule_day="THU",
+        start_time=time(10, 29),
+        end_time=time(11, 30),
+    )
+
+    first = client.post("/api/enrollments", json={"student_id": student_id, "course_id": first_course_id})
+    assert first.status_code == 200
+
+    conflict = client.post("/api/enrollments", json={"student_id": student_id, "course_id": second_course_id})
+    assert conflict.status_code == 409
+    assert conflict.json()["code"] == "SCHEDULE_CONFLICT"
+
+
+def test_concurrency_allows_only_one_success_for_one_remaining_seat(test_data_factory) -> None:
+    department_id = test_data_factory.create_department()
+    professor_id = test_data_factory.create_professor(department_id)
+    course_id = test_data_factory.create_course(
+        department_id=department_id,
+        professor_id=professor_id,
+        credits=3,
+        capacity=1,
+        schedule_day="FRI",
+        start_time=time(13, 0),
+        end_time=time(14, 30),
+    )
+
+    student_ids = [test_data_factory.create_student(department_id) for _ in range(30)]
+    service = EnrollmentService()
+
+    def worker(student_id: int) -> str:
+        with SessionLocal() as db:
+            try:
+                service.enroll(db, student_id, course_id)
+                return "success"
+            except ConflictException:
+                return "conflict"
+
+    with ThreadPoolExecutor(max_workers=30) as executor:
+        results = list(executor.map(worker, student_ids))
+
+    assert results.count("success") == 1
+    assert results.count("conflict") == 29
+
+    with SessionLocal() as db:
+        enrolled = db.scalar(select(Course.enrolled).where(Course.id == course_id))
+        enrolled_rows = db.scalar(
+            select(func.count()).select_from(Enrollment).where(Enrollment.course_id == course_id)
+        )
+
+    assert enrolled == 1
+    assert enrolled_rows == 1
