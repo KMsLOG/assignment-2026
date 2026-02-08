@@ -4,6 +4,7 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from app.core.exception_handler import register_exception_handlers
 
@@ -15,6 +16,10 @@ def _build_error_app() -> FastAPI:
     @app.get("/boom")
     def boom() -> dict[str, str]:
         raise RuntimeError("boom")
+
+    @app.get("/db-timeout")
+    def db_timeout() -> dict[str, str]:
+        raise SQLAlchemyTimeoutError("pool timeout")
 
     return app
 
@@ -56,3 +61,15 @@ def test_internal_error_logs_stacktrace(caplog) -> None:
 
     assert response.status_code == 500
     assert any(record.exc_info is not None for record in caplog.records)
+
+
+def test_db_timeout_is_mapped_to_503() -> None:
+    app = _build_error_app()
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/db-timeout", headers={"X-Request-Id": "db-timeout"})
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["code"] == "DB_CONNECTION_POOL_EXHAUSTED"
+    assert body["details"]["request_id"] == "db-timeout"

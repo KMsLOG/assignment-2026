@@ -6,6 +6,7 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from app.core.exceptions import AppException
 from app.core.observability import request_id_from_request
@@ -50,6 +51,28 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "code": "INVALID_REQUEST",
                 "message": "Request validation failed.",
                 "details": _with_request_id(request, {"errors": exc.errors()}),
+            },
+        )
+
+    @app.exception_handler(SQLAlchemyTimeoutError)
+    async def db_pool_timeout_handler(request: Request, exc: SQLAlchemyTimeoutError) -> JSONResponse:
+        """Return a retryable 503 when DB connection pool is saturated."""
+        details = _with_request_id(request)
+        _logger.warning(
+            "Database pool timeout",
+            exc_info=True,
+            extra={
+                "request_id": details.get("request_id"),
+                "path": request.url.path,
+                "method": request.method,
+            },
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": "DB_CONNECTION_POOL_EXHAUSTED",
+                "message": "Database connection pool is busy. Please retry shortly.",
+                "details": details,
             },
         )
 

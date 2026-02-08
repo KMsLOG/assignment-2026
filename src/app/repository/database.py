@@ -19,6 +19,30 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    """Read a positive integer environment variable with fallback."""
+    value = _int_env(name, default)
+    return value if value > 0 else default
+
+
+def _non_negative_int_env(name: str, default: int) -> int:
+    """Read a non-negative integer environment variable with fallback."""
+    value = _int_env(name, default)
+    return value if value >= 0 else default
+
+
+def _float_env(name: str, default: float) -> float:
+    """Read a positive float environment variable with fallback."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 def database_url() -> str:
     """Build a MySQL SQLAlchemy URL from environment variables."""
     host = os.getenv("DB_HOST", "127.0.0.1")
@@ -32,7 +56,10 @@ def database_url() -> str:
 engine = create_engine(
     database_url(),
     pool_pre_ping=True,
-    pool_recycle=1800,
+    pool_size=_positive_int_env("DB_POOL_SIZE", 30),
+    max_overflow=_non_negative_int_env("DB_MAX_OVERFLOW", 30),
+    pool_timeout=_float_env("DB_POOL_TIMEOUT_SECONDS", 5.0),
+    pool_recycle=_positive_int_env("DB_POOL_RECYCLE_SECONDS", 1800),
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
