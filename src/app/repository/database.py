@@ -1,3 +1,5 @@
+"""SQLAlchemy engine/session setup and DB readiness checks."""
+
 import os
 import time
 from collections.abc import Generator
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 def _int_env(name: str, default: int) -> int:
+    """Read an integer environment variable with fallback."""
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -17,6 +20,7 @@ def _int_env(name: str, default: int) -> int:
 
 
 def database_url() -> str:
+    """Build a MySQL SQLAlchemy URL from environment variables."""
     host = os.getenv("DB_HOST", "127.0.0.1")
     port = _int_env("DB_PORT", 3306)
     user = os.getenv("DB_USER", "app")
@@ -34,6 +38,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def get_db_session() -> Generator[Session, None, None]:
+    """Yield and clean up a request-scoped database session."""
     session = SessionLocal()
     try:
         yield session
@@ -42,6 +47,7 @@ def get_db_session() -> Generator[Session, None, None]:
 
 
 def wait_for_database(max_wait_seconds: int = 50) -> None:
+    """Block until DB connectivity is available or timeout is reached."""
     deadline = time.time() + max_wait_seconds
     last_error: Exception | None = None
 

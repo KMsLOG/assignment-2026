@@ -1,3 +1,5 @@
+"""Enrollment service implementing registration business rules."""
+
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -13,16 +15,21 @@ MAX_CREDITS_PER_STUDENT = 18
 
 
 def _is_time_conflict(a_start, a_end, b_start, b_end) -> bool:
+    """Return True when two time ranges overlap by at least one minute."""
     return a_start < b_end and b_start < a_end
 
 
 class EnrollmentService:
+    """Handle enrollment creation/cancellation with transactional safety."""
+
     def __init__(self) -> None:
+        """Initialize repository dependencies."""
         self.student_repository = StudentRepository()
         self.course_repository = CourseRepository()
         self.enrollment_repository = EnrollmentRepository()
 
     def enroll(self, db: Session, student_id: int, course_id: int) -> EnrollmentResponse:
+        """Enroll a student in a course after validating all constraints."""
         with db.begin():
             student = self.student_repository.get_by_id_for_update(db, student_id)
             if student is None:
@@ -99,6 +106,7 @@ class EnrollmentService:
         )
 
     def cancel(self, db: Session, student_id: int, course_id: int) -> CancelEnrollmentResponse:
+        """Cancel a student's enrollment and decrement enrolled count safely."""
         with db.begin():
             student = self.student_repository.get_by_id_for_update(db, student_id)
             if student is None:

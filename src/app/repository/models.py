@@ -1,3 +1,5 @@
+"""SQLAlchemy ORM models for the course registration domain."""
+
 from datetime import datetime, time
 
 from sqlalchemy import (
@@ -16,10 +18,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
+    """Base class for all ORM models."""
+
     pass
 
 
 class Department(Base):
+    """Academic department entity."""
+
     __tablename__ = "departments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -33,6 +39,8 @@ class Department(Base):
 
 
 class Professor(Base):
+    """Professor entity linked to a department."""
+
     __tablename__ = "professors"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -50,6 +58,8 @@ class Professor(Base):
 
 
 class Student(Base):
+    """Student entity linked to a department."""
+
     __tablename__ = "students"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -69,6 +79,8 @@ class Student(Base):
 
 
 class Course(Base):
+    """Course entity with schedule and enrollment capacity."""
+
     __tablename__ = "courses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -104,6 +116,8 @@ class Course(Base):
 
 
 class Enrollment(Base):
+    """Join entity representing a student's course enrollment."""
+
     __tablename__ = "enrollments"
 
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), primary_key=True)

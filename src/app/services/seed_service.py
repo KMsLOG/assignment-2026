@@ -1,3 +1,5 @@
+"""Runtime dataset generation logic for development and evaluation."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -140,6 +142,7 @@ TIME_SLOTS = [
 
 
 def _name_for(index: int, m1: int, m2: int) -> str:
+    """Generate a deterministic Korean-style full name from token tables."""
     family = LAST_NAMES[index % len(LAST_NAMES)]
     first = GIVEN_NAME_SYLLABLES[(index * m1) % len(GIVEN_NAME_SYLLABLES)]
     second = GIVEN_NAME_SYLLABLES[(index * m2 + 7) % len(GIVEN_NAME_SYLLABLES)]
@@ -147,6 +150,7 @@ def _name_for(index: int, m1: int, m2: int) -> str:
 
 
 def _table_counts(db: Session) -> dict[str, int]:
+    """Return current row counts for core domain tables."""
     counts = {
         "departments": db.scalar(select(func.count()).select_from(Department)) or 0,
         "professors": db.scalar(select(func.count()).select_from(Professor)) or 0,
@@ -157,10 +161,12 @@ def _table_counts(db: Session) -> dict[str, int]:
 
 
 def _needs_seed(counts: dict[str, int]) -> bool:
+    """Return True when any table is below the required minimum count."""
     return any(counts[table] < min_count for table, min_count in MIN_COUNTS.items())
 
 
 def seed_runtime_data(db: Session) -> dict[str, object]:
+    """Populate minimum viable data set when DB is empty or undersized."""
     current_counts = _table_counts(db)
     if not _needs_seed(current_counts):
         db.rollback()
