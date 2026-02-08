@@ -88,10 +88,13 @@
   - `ENROLLMENT_LOCK_RETRY_ATTEMPTS` (기본 3)
   - `ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS` (기본 0.05)
 - 재시도 소진 시 `409 CONCURRENCY_RETRY_EXHAUSTED`로 명시적 실패 응답
+- 수강신청 API는 인플라이트 요청 수 상한을 두고, 초과 시 즉시 `503 ENROLLMENT_REQUEST_LIMIT_REACHED` 응답
+- DB 커넥션 풀은 환경변수(`DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT_SECONDS`)로 튜닝 가능
 
 ### 5.3 검증 기준
 - 잔여 1석 동시 요청에서 성공 1건, 실패 N-1건
 - 최종 `enrolled <= capacity` 항상 참
+- 과부하 시 장시간 대기 대신 `503` 기반 빠른 실패로 복구 가능성 확보
 
 ## 6. 데이터 생성 설계
 
@@ -139,6 +142,8 @@
 - `CREDIT_LIMIT_EXCEEDED` (409)
 - `SCHEDULE_CONFLICT` (409)
 - `CONCURRENCY_RETRY_EXHAUSTED` (409)
+- `ENROLLMENT_REQUEST_LIMIT_REACHED` (503)
+- `DB_CONNECTION_POOL_EXHAUSTED` (503)
 - `INTERNAL_SERVER_ERROR` (500)
 
 ## 8. 운영/보안/관측성 요구(추가 평가 대응)
@@ -146,6 +151,8 @@
 ### 8.1 운영 안정성
 - 앱 시작 훅은 FastAPI lifespan 사용
 - startup 초기화는 락 기반으로 중복 실행 방지
+- DB 커넥션 풀 고갈은 `503 DB_CONNECTION_POOL_EXHAUSTED`로 변환해 재시도 가능한 오류로 표준화
+- 수강신청 API 인플라이트 제한으로 급증 트래픽에서 fail-fast 처리
 
 ### 8.2 관측 가능성
 - 모든 응답에 `X-Request-Id`, `X-Process-Time-Ms` 헤더 제공

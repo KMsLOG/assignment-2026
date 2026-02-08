@@ -26,6 +26,11 @@ MYSQL_PASSWORD=change-me-app-password
 APP_DEBUG=false
 LOG_LEVEL=INFO
 CORS_ALLOW_ORIGINS=http://localhost:8000,http://localhost:3000
+DB_POOL_SIZE=30
+DB_MAX_OVERFLOW=30
+DB_POOL_TIMEOUT_SECONDS=5
+DB_POOL_RECYCLE_SECONDS=1800
+ENROLLMENT_MAX_INFLIGHT_REQUESTS=40
 ENROLLMENT_LOCK_RETRY_ATTEMPTS=3
 ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS=0.05
 ```
@@ -85,3 +90,8 @@ docker compose down
   - 데드락/락 타임아웃(1213/1205) 시 자동 재시도합니다.
   - `ENROLLMENT_LOCK_RETRY_ATTEMPTS`: 최대 재시도 횟수(기본 `3`)
   - `ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS`: 선형 백오프 기본값(기본 `0.05`초)
+- 부하 대응 설정:
+  - `DB_POOL_SIZE`: 기본 커넥션 풀 크기(기본 `30`)
+  - `DB_MAX_OVERFLOW`: 풀 초과 시 임시 커넥션 허용 수(기본 `30`)
+  - `DB_POOL_TIMEOUT_SECONDS`: 커넥션 대기 최대 시간(기본 `5`)
+  - `ENROLLMENT_MAX_INFLIGHT_REQUESTS`: 수강신청 API 동시 처리 상한(기본 `40`)

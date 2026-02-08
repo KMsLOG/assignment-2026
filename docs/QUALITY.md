@@ -9,6 +9,8 @@
 - 앱 프로세스 관점에서 런타임 초기화가 멱등적으로 동작하도록 구성했습니다.
 - 수강신청/취소 트랜잭션에서 데드락/락 대기 타임아웃 발생 시 자동 재시도 전략을 적용했습니다.
   - `ENROLLMENT_LOCK_RETRY_ATTEMPTS`, `ENROLLMENT_LOCK_RETRY_BACKOFF_SECONDS`로 운영 중 튜닝 가능합니다.
+- DB 커넥션 풀은 `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT_SECONDS`로 트래픽 수준에 맞춰 조정할 수 있습니다.
+- 수강신청 API에는 인플라이트 요청 상한(`ENROLLMENT_MAX_INFLIGHT_REQUESTS`)을 적용해 과부하 시 fail-fast 처리합니다.
 
 관련 파일:
 - `src/app/main.py`
@@ -37,6 +39,7 @@
 - 로컬 디버깅 시에만 `APP_DEBUG=true`를 사용하도록 분리했습니다.
 - 모든 에러 응답 details에 `request_id`를 포함해 추적성을 확보했습니다.
 - 처리되지 않은 예외는 스택트레이스와 함께 서버 로그(`app.exception`)에 기록합니다.
+- DB 커넥션 풀 고갈은 `503 DB_CONNECTION_POOL_EXHAUSTED`로 매핑되어 재시도 가능한 장애임을 명시합니다.
 - CORS 출처를 `CORS_ALLOW_ORIGINS` 환경변수 기반 allowlist로 관리합니다.
 - 와일드카드(`*`)를 사용할 경우 credential CORS는 자동 비활성화됩니다.
 

@@ -265,6 +265,17 @@ paths:
                   $ref: '#/components/examples/ScheduleConflict'
                 concurrency_retry_exhausted:
                   $ref: '#/components/examples/ConcurrencyRetryExhausted'
+        '503':
+          description: 일시적 과부하 또는 DB 풀 고갈
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                enrollment_request_limit_reached:
+                  $ref: '#/components/examples/EnrollmentRequestLimitReached'
+                db_connection_pool_exhausted:
+                  $ref: '#/components/examples/DbConnectionPoolExhausted'
 
   /api/enrollments/{student_id}/{course_id}:
     delete:
@@ -411,6 +422,18 @@ components:
           operation: enroll
           attempts: 3
           db_error_code: 1213
+    EnrollmentRequestLimitReached:
+      value:
+        code: ENROLLMENT_REQUEST_LIMIT_REACHED
+        message: Enrollment API is busy. Please retry shortly.
+        details:
+          max_inflight_requests: 40
+    DbConnectionPoolExhausted:
+      value:
+        code: DB_CONNECTION_POOL_EXHAUSTED
+        message: Database connection pool is busy. Please retry shortly.
+        details:
+          request_id: 7f84a9cc-7c02-4689-9d2f-6ce7c2cc4b9c
 
   schemas:
     HealthResponse:
